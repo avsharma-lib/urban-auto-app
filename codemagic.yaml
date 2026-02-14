@@ -1,34 +1,58 @@
 workflows:
   android-builds:
-    name: Urban Auto - AAB + APK (Debug + Release)
+    name: Urban Auto - Signed AAB + APK (Custom Icon)
     max_build_duration: 120
 
     environment:
       node: 22
       java: 21
+      groups:
+        - supabase
 
     scripts:
       - name: Install dependencies
         script: |
+          rm -rf node_modules
           npm install
 
       - name: Build Next.js
         script: |
           npm run build
 
+      - name: Ensure Android platform exists
+        script: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+
       - name: Sync Capacitor Android
         script: |
           npx cap sync android
 
-      - name: Build Android (AAB + APK)
+      - name: Inject custom app icon
+        script: |
+          ICON="resources/IMG-20260210-WA0024.png"
+          if [ -f "$ICON" ]; then
+            echo "Applying custom icon..."
+
+            for dpi in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+              mkdir -p android/app/src/main/res/mipmap-$dpi
+              cp "$ICON" android/app/src/main/res/mipmap-$dpi/ic_launcher.png
+              cp "$ICON" android/app/src/main/res/mipmap-$dpi/ic_launcher_round.png || true
+            done
+          else
+            echo "Icon file not found: $ICON"
+            exit 1
+          fi
+
+      - name: Build Signed APK + AAB
         script: |
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease
-          ./gradlew assembleDebug
+          ./gradlew clean
           ./gradlew assembleRelease
+          ./gradlew bundleRelease
 
     artifacts:
-      - android/app/build/outputs/bundle/release/*.aab
-      - android/app/build/outputs/apk/debug/*.apk
       - android/app/build/outputs/apk/release/*.apk
+      - android/app/build/outputs/bundle/release/*.aab
